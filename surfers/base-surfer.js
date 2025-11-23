@@ -1,12 +1,15 @@
 /**
- * BaseAutoSurfer - Shared automation utilities for all social media platforms
+ * BaseAutoSurfer - Shared automation base class
  *
- * This base class contains all common functionality for:
- * - Settings management
- * - Sequential engagement cycle
- * - Human-like interactions (cursor, clicks, typing)
- * - Session statistics
- * - Message passing with popup
+ * Used by: Twitter, Instagram, Reddit surfers
+ * Architecture: Uses shared utility modules via composition
+ *
+ * Utilities (from surfers/utilities/):
+ * - CursorAnimator (cursor-animator.js): Visual cursor & clicks
+ * - TextTyper (text-typer.js): Human-like typing
+ * - DuplicateDetector (engagement-helpers.js): Prevent re-engagement
+ * - SafetyLimits (engagement-helpers.js): Rate limiting
+ * - DOMHelpers (dom-helpers.js): DOM utilities
  *
  * PLATFORM-SPECIFIC CLASSES SHOULD OVERRIDE:
  * 1. getPlatformSelectors() - Return platform-specific DOM selectors
@@ -18,7 +21,6 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
   constructor() {
     this.isActive = false;
     this.engagementTimeout = null;
-    this.cursor = null;
     this.platform = 'unknown'; // Platform subclasses should set this
     this.selectors = {}; // Platform subclasses should populate this via getPlatformSelectors()
 
@@ -36,16 +38,6 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
       postEngagementDelay: 3000
     };
 
-    this.positiveResponses = [
-      "Great post! 👍",
-      "Love this! ❤️",
-      "So inspiring! ✨",
-      "Amazing content! 🔥",
-      "This made my day! 😊",
-      "Fantastic! 🌟",
-      "Absolutely wonderful! 💯",
-      "Keep it up! 🚀"
-    ];
 
     this.sessionStats = {
       totalPostsViewed: 0,
@@ -54,8 +46,15 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
       totalComments: 0
     };
 
+    // Initialize shared utilities
+    this.cursor = new window.CursorAnimator();
+    this.typer = new window.TextTyper();
+    this.duplicateDetector = new window.DuplicateDetector();
+    this.safetyLimits = new window.SafetyLimits();
+    this.templateGenerator = new window.TemplateGenerator();
+
     this.init();
-    this.createCursor();
+    this.cursor.createCursor();
   }
 
   /**
@@ -107,7 +106,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
           return text === keyword || ariaLabel === keyword;
         }
         return textLower.includes(keyword.toLowerCase()) ||
-               ariaLabelLower.includes(keyword.toLowerCase());
+          ariaLabelLower.includes(keyword.toLowerCase());
       });
 
       if (matchesKeyword) {
@@ -170,9 +169,9 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
         const matchesPattern = expandKeywords.some(pattern => {
           return text === pattern ||
-                 text.includes(pattern) ||
-                 ariaLabel === pattern ||
-                 ariaLabel.includes(pattern);
+            text.includes(pattern) ||
+            ariaLabel === pattern ||
+            ariaLabel.includes(pattern);
         });
 
         if (matchesPattern) {
@@ -206,7 +205,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
             return text === keyword || ariaLabel === keyword;
           }
           return textLower.includes(keyword.toLowerCase()) ||
-                 ariaLabelLower.includes(keyword.toLowerCase());
+            ariaLabelLower.includes(keyword.toLowerCase());
         });
 
         // Special patterns for non-Facebook platforms
@@ -244,9 +243,10 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
    * Override this in platform subclasses for platform-specific submit button detection
    *
    * @param {HTMLElement} textArea - The text area element (can be used for context)
+   * @param {HTMLElement} post - The post element to search within
    * @returns {HTMLElement|null} Submit button or null
    */
-  findSubmitButton(textArea) {
+  findSubmitButton(textArea, post) {
     // Default generic selectors for platforms without specific overrides
     const selectors = [
       '[type="submit"]',
@@ -256,11 +256,29 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
       'button[aria-label*="Reply"]'
     ];
 
-    for (const selector of selectors) {
-      const btn = document.querySelector(selector);
-      if (btn && !btn.disabled) {
-        console.log(`[Submit] Found button with selector: ${selector}`);
-        return btn;
+    // First try to find within the post context
+    if (post) {
+      for (const selector of selectors) {
+        const btn = post.querySelector(selector);
+        if (btn && !btn.disabled) {
+          console.log(`[Submit] Found button in post with selector: ${selector}`);
+          return btn;
+        }
+      }
+    }
+
+    // Fallback: try to find near the text area by traversing up
+    let container = textArea;
+    for (let i = 0; i < 5; i++) {
+      container = container.parentElement;
+      if (!container) break;
+
+      for (const selector of selectors) {
+        const btn = container.querySelector(selector);
+        if (btn && !btn.disabled) {
+          console.log(`[Submit] Found button in parent container with selector: ${selector}`);
+          return btn;
+        }
       }
     }
 
@@ -274,6 +292,8 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
     this.loadSettings();
     this.initializePlatform();
     this.listenForMessages();
+    this.templateGenerator.setPlatform(this.platform);
+    this.templateGenerator.loadFromStorage();
   }
 
   /**
@@ -291,12 +311,60 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
   async loadSettings() {
     try {
-      const result = await chrome.storage.sync.get(['surfSettings']);
+      const result = await chrome.storage.sync.get(['surfSettings', 'mode', 'proModeSettings']);
       if (result.surfSettings) {
         this.settings = { ...this.settings, ...result.surfSettings };
       }
+      if (result.mode) {
+        this.mode = result.mode;
+      }
+      if (result.proModeSettings) {
+        this.proModeSettings = result.proModeSettings;
+      }
     } catch (error) {
       console.log('Using default settings');
+    }
+  }
+
+  /**
+   * Extract post content for Pro mode AI processing
+   * @param {HTMLElement} post - The post element to extract content from
+   * @returns {Object} Extracted content with text and author info
+   */
+  extractPostContent(post) {
+    try {
+      // Try to extract post text content
+      let postText = '';
+      const textSelectors = [
+        '[data-ad-comet-preview="message"]', // Facebook
+        '.feed-shared-update-v2__description', // LinkedIn
+        '[data-testid="tweetText"]', // Twitter
+        '.update-components-text' // LinkedIn alternative
+      ];
+
+      for (const selector of textSelectors) {
+        const textElement = post.querySelector(selector);
+        if (textElement) {
+          postText = textElement.textContent.trim();
+          break;
+        }
+      }
+
+      // If no specific selector worked, try getting all text
+      if (!postText) {
+        postText = post.textContent.trim().substring(0, 500); // Limit to 500 chars
+      }
+
+      const extractedContent = {
+        text: postText,
+        platform: this.platform,
+        timestamp: new Date().toISOString()
+      };
+
+      return extractedContent;
+    } catch (error) {
+      console.error('[Post Extraction] Failed:', error);
+      return { text: '', platform: this.platform, timestamp: new Date().toISOString() };
     }
   }
 
@@ -345,6 +413,37 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
           this.testCommentPost();
           sendResponse({ success: true });
           return true;
+        case 'testPostDetection':
+          if (typeof this.testPostDetection === 'function') {
+            this.testPostDetection();
+          } else {
+            console.log('testPostDetection not implemented for this platform');
+          }
+          sendResponse({ success: true });
+          return true;
+        case 'testReactButton':
+          if (typeof this.testReactButton === 'function') {
+            this.testReactButton();
+          } else {
+            console.log('testReactButton not implemented for this platform');
+          }
+          sendResponse({ success: true });
+          return true;
+        case 'testCommentFlow':
+          if (typeof this.testCommentFlow === 'function') {
+            this.testCommentFlow();
+          } else {
+            console.log('testCommentFlow not implemented for this platform');
+          }
+          sendResponse({ success: true });
+          return true;
+        case 'updateTemplates':
+          // Only update if the templates are for this platform
+          if (message.platform === this.platform) {
+            this.templateGenerator.updateTemplates(message.templates);
+          }
+          sendResponse({ success: true });
+          return true;
       }
       // Only return true if we called sendResponse above
       return false;
@@ -373,7 +472,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
     console.log('See More:', this.settings.enableSeeMore);
 
     this.startSequentialEngagement();
-    this.showNotification('Auto surfing started! Using sequential engagement.', 'success');
+    DOMHelpers.showNotification('Auto surfing started! Using sequential engagement.', 'success');
   }
 
   stop() {
@@ -392,8 +491,8 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
     console.log(`  Total Comments Added: ${this.sessionStats.totalComments}`);
     console.log('======================');
 
-    this.showNotification(
-      `Session ended! Posts: ${this.sessionStats.totalPostsViewed}, Liked: ${this.sessionStats.totalSeeMoreClicked}`,
+    DOMHelpers.showNotification(
+      `Session ended! Posts: ${this.sessionStats.totalPostsViewed}, Liked: ${this.sessionStats.totalPostsLiked}, Comments: ${this.sessionStats.totalComments}`,
       'info'
     );
   }
@@ -407,7 +506,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
       // Step 1: Check for visible unengaged posts
       let posts = document.querySelectorAll(this.selectors.posts);
       let visiblePosts = Array.from(posts).filter(post =>
-        this.isElementInViewport(post) && !post.getAttribute('data-surfer-engaged')
+        DOMHelpers.isElementInViewport(post) && !post.getAttribute('data-surfer-engaged')
       );
 
       // Step 2: If no visible posts, use smart scrolling to find one
@@ -418,7 +517,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
         if (!foundPost) {
           // No new posts found after scrolling, wait and retry
           console.log('[Engagement] No new posts found, waiting 7s before retry...');
-          await this.sleep(7000);
+          await DOMHelpers.sleep(7000);
           this.scheduleNextCycle();
           return;
         }
@@ -426,12 +525,12 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
         // Re-check for visible posts after smart scrolling
         posts = document.querySelectorAll(this.selectors.posts);
         visiblePosts = Array.from(posts).filter(post =>
-          this.isElementInViewport(post) && !post.getAttribute('data-surfer-engaged')
+          DOMHelpers.isElementInViewport(post) && !post.getAttribute('data-surfer-engaged')
         );
 
         if (visiblePosts.length === 0) {
           // Still no posts (shouldn't happen, but safety check)
-          await this.sleep(5000);
+          await DOMHelpers.sleep(5000);
           this.scheduleNextCycle();
           return;
         }
@@ -439,10 +538,18 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
       const targetPost = visiblePosts[0];
 
-      // Step 3: Ensure post is fully engageable (interaction buttons visible)
-      if (!this.isPostFullyEngageable(targetPost)) {
+      // Step 3: Check if platform wants to skip this post (promoted ads, etc.)
+      if (typeof this.shouldSkipPost === 'function' && this.shouldSkipPost(targetPost)) {
+        targetPost.setAttribute('data-surfer-engaged', 'true'); // Mark as seen
+        console.log('[Engagement] Post skipped by platform filter');
+        this.scheduleNextCycle(); // Skip to next post
+        return;
+      }
+
+      // Step 4: Ensure post is fully engageable (interaction buttons visible)
+      if (!DOMHelpers.isPostFullyEngageable(targetPost, this.selectors)) {
         console.log('[Engagement] Interaction buttons not fully visible, adjusting scroll...');
-        await this.scrollPostIntoEngageableView(targetPost);
+        await DOMHelpers.scrollPostIntoEngageableView(targetPost, this.selectors);
       }
 
       targetPost.setAttribute('data-surfer-engaged', 'true');
@@ -450,35 +557,35 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
       console.log(`[Post #${this.sessionStats.totalPostsViewed}] Starting engagement`);
 
-      // Step 4: Click "see more" if enabled
+      // Step 5: Click "see more" if enabled
       if (this.settings.enableSeeMore) {
         await this.clickSeeMoreOnPost(targetPost);
-        await this.sleep(this.settings.seeMoreDelay);
+        await DOMHelpers.sleep(this.settings.seeMoreDelay);
       }
 
-      // Step 4: Auto like if enabled and passes probability check
+      // Step 6: Auto like if enabled and passes probability check
       if (this.settings.enableAutoLike) {
         const likeRoll = Math.random() * 100;
         const shouldLike = likeRoll < this.settings.likeProbability;
 
         if (shouldLike) {
           await this.likePost(targetPost);
-          await this.sleep(this.settings.likeDelay);
+          await DOMHelpers.sleep(this.settings.likeDelay);
         }
       }
 
-      // Step 5: Auto comment if enabled and passes probability check
+      // Step 7: Auto comment if enabled and passes probability check
       if (this.settings.enableAutoComment) {
         const commentRoll = Math.random() * 100;
         const shouldComment = commentRoll < this.settings.commentProbability;
 
         if (shouldComment) {
           await this.commentPost(targetPost);
-          await this.sleep(this.settings.commentDelay);
+          await DOMHelpers.sleep(this.settings.commentDelay);
         }
       }
 
-      await this.sleep(this.settings.postEngagementDelay);
+      await DOMHelpers.sleep(this.settings.postEngagementDelay);
       this.scheduleNextCycle();
     };
 
@@ -526,12 +633,12 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
       // Perform small incremental scroll with randomization
       await this.performScroll(randomScrollAmount);
-      await this.sleep(randomDelay);
+      await DOMHelpers.sleep(randomDelay);
 
       // Check for visible unengaged posts
       const posts = document.querySelectorAll(this.selectors.posts);
       const visibleUnengagedPosts = Array.from(posts).filter(post =>
-        this.isElementInViewport(post) && !post.getAttribute('data-surfer-engaged')
+        DOMHelpers.isElementInViewport(post) && !post.getAttribute('data-surfer-engaged')
       );
 
       if (visibleUnengagedPosts.length > 0) {
@@ -556,14 +663,14 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
     try {
       const seeMoreButtons = this.findSeeMoreButtonsInPost(post);
       const visibleButtons = seeMoreButtons.filter(button =>
-        this.isElementInViewport(button) && !button.getAttribute('data-surfer-clicked')
+        DOMHelpers.isElementInViewport(button) && !button.getAttribute('data-surfer-clicked')
       );
 
       if (visibleButtons.length > 0) {
         const button = visibleButtons[0];
         button.setAttribute('data-surfer-clicked', 'true');
         this.sessionStats.totalSeeMoreClicked++;
-        await this.humanLikeClick(button, `Clicked "${button.textContent.trim()}" 👁️`);
+        await this.cursor.humanLikeClick(button, (msg) => DOMHelpers.showNotification(msg, 'success'), `Clicked "${button.textContent.trim()}" 👁️`);
       }
     } catch (error) {
       console.log('Error clicking See More:', error);
@@ -600,12 +707,21 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
         const notClickedByUs = !alreadyClicked;
 
         if (isNotLiked && notClickedByUs) {
-          likeButton.setAttribute('data-surfer-liked', 'true');
-          await this.sleep(Math.random() * 1000 + 500);
+          // Check safety limits
+          if (!this.safetyLimits.canLike()) {
+            console.log('[Safety] Like limit reached - skipping');
+            return;
+          }
 
-          await this.humanLikeClick(likeButton, 'Liked a post! ❤️');
+          likeButton.setAttribute('data-surfer-liked', 'true');
+          await DOMHelpers.sleep(Math.random() * 1000 + 500);
+
+          await this.cursor.humanLikeClick(likeButton, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Liked a post! ❤️');
           didLike = true;
           this.sessionStats.totalPostsLiked++;
+
+          // Record safety stats
+          await this.safetyLimits.recordLike();
         }
       }
     } catch (error) {
@@ -615,14 +731,61 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
   async commentPost(post) {
     try {
+      // Safety checks
+      if (!this.safetyLimits.canComment()) {
+        console.log('[Safety] Comment limit reached - skipping');
+        return;
+      }
+
+      // Duplicate checks
+      try {
+        const postUrl = this.getPostUrl(post);
+        const authorName = this.getAuthorName(post);
+        const content = this.getPostContent(post);
+
+        if (this.duplicateDetector.hasEngagedUrl(postUrl)) {
+          console.log('[Skip] Already engaged with this URL');
+          return;
+        }
+
+        if (this.duplicateDetector.hasEngagedAuthor(authorName, 24)) {
+          console.log(`[Skip] Already engaged with ${authorName} in last 24h`);
+          return;
+        }
+
+        if (await this.duplicateDetector.hasEngagedContent(content)) {
+          console.log('[Skip] Duplicate content detected');
+          return;
+        }
+      } catch (e) {
+        // If platform doesn't implement extraction methods, just warn and proceed
+        console.log('[Duplicate] Could not extract post data for duplicate check:', e.message);
+      }
+
       const commented = await this.addPositiveComment(post);
       if (commented) {
         this.sessionStats.totalComments++;
+        await this.safetyLimits.recordComment();
+
+        // Record for duplicate detection
+        try {
+          const postUrl = this.getPostUrl(post);
+          const authorName = this.getAuthorName(post);
+          const content = this.getPostContent(post);
+          await this.duplicateDetector.recordEngagement(postUrl, authorName, content);
+        } catch (e) {
+          console.log('[Duplicate] Failed to record engagement:', e.message);
+        }
       }
     } catch (error) {
       console.log('[Comment] Error:', error);
     }
   }
+
+  // Default extraction methods (to be overridden)
+  getPostUrl(post) { return null; }
+  getAuthorName(post) { return null; }
+  getPostContent(post) { return null; }
 
   async addPositiveComment(post) {
     try {
@@ -630,9 +793,9 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
       if (!commentButton || commentButton.getAttribute('data-surfer-commented')) return false;
 
       commentButton.setAttribute('data-surfer-commented', 'true');
-      await this.humanLikeClick(commentButton, 'Opening comment box...');
+      await this.cursor.humanLikeClick(commentButton, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Opening comment box...');
 
-      await this.sleep(2000);
+      await DOMHelpers.sleep(2000);
 
       // LinkedIn-specific handling
       if (this.platform === 'linkedin') {
@@ -654,8 +817,8 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
         }
 
         if (commentInput) {
-          await this.humanLikeClick(commentInput, 'Activating comment field...');
-          await this.sleep(1000);
+          await this.cursor.humanLikeClick(commentInput, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Activating comment field...');
+          await DOMHelpers.sleep(1000);
         }
       }
 
@@ -673,7 +836,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
       for (const selector of selectors) {
         const elements = document.querySelectorAll(selector);
         for (const el of elements) {
-          const isVisible = (this.isElementInViewport(el) || el.offsetParent !== null);
+          const isVisible = (DOMHelpers.isElementInViewport(el) || el.offsetParent !== null);
           const isEditable = el.contentEditable === 'true' || el.getAttribute('contenteditable') === 'true' || el.tagName === 'TEXTAREA';
 
           if (isVisible && isEditable) {
@@ -686,19 +849,52 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
       if (textArea) {
         console.log('[Comment] Text area found, clicking to focus...');
-        textArea.click();
-        textArea.focus();
-        await this.sleep(500);
 
-        const randomResponse = this.positiveResponses[Math.floor(Math.random() * this.positiveResponses.length)];
+        // Move cursor up from text area center and click (fixes border click issue)
+        const rect = textArea.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const adjustedY = centerY - 10; // Move up 10 pixels
 
-        await this.typeText(textArea, randomResponse);
-        await this.sleep(1000 + Math.random() * 1000);
+        // Create temporary element to click at adjusted position
+        const clickTarget = document.elementFromPoint(centerX, adjustedY) || textArea;
+        await this.cursor.humanLikeClick(clickTarget, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Focusing comment input...');
+        await DOMHelpers.sleep(500);
 
-        const submitButton = this.findSubmitButton(textArea);
+        let randomResponse;
+
+        // Check if Pro mode is enabled
+        if (this.mode === 'pro') {
+          const postContent = this.extractPostContent(post);
+          console.log('[PRO MODE] Extracted Post Content:', postContent);
+          console.log('[PRO MODE] Selected Persona:', this.proModeSettings?.persona || 'friendly');
+
+          // For now, just log and use regular template
+          // In future: Call AI API here with postContent and persona
+          console.log('[PRO MODE] TODO: Call AI API to generate comment based on:', {
+            postContent: postContent,
+            persona: this.proModeSettings?.persona,
+            customPreset: this.proModeSettings?.customPresets
+          });
+
+          // Use regular template for now
+          randomResponse = this.templateGenerator.generateComment({
+            authorName: '' // Base surfer doesn't extract author names
+          });
+        } else {
+          // Free mode: use regular template generation
+          randomResponse = this.templateGenerator.generateComment({
+            authorName: '' // Base surfer doesn't extract author names
+          });
+        }
+
+        await this.typer.typeText(textArea, randomResponse);
+        await DOMHelpers.sleep(1000 + Math.random() * 1000);
+
+        const submitButton = this.findSubmitButton(textArea, post);
 
         if (submitButton) {
-          await this.humanLikeClick(submitButton, 'Added positive comment! 💬');
+          await this.cursor.humanLikeClick(submitButton, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Added positive comment! 💬');
           return true;
         }
       }
@@ -720,7 +916,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
     console.log(`Found ${buttons.length} see more buttons`);
 
     if (buttons.length > 0) {
-      const visibleButtons = buttons.filter(button => this.isElementInViewport(button));
+      const visibleButtons = buttons.filter(button => DOMHelpers.isElementInViewport(button));
       console.log(`${visibleButtons.length} are visible`);
 
       if (visibleButtons.length > 0) {
@@ -737,10 +933,10 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
           testButton.style.backgroundColor = '';
         }, 3000);
 
-        this.showNotification(`Found button: "${testButton.textContent.trim()}"`, 'info');
+        DOMHelpers.showNotification(`Found button: "${testButton.textContent.trim()}"`, 'info');
       }
     } else {
-      this.showNotification('No see more buttons found!', 'error');
+      DOMHelpers.showNotification('No see more buttons found!', 'error');
     }
   }
 
@@ -751,7 +947,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
     console.log('Like button selector:', this.selectors.likeButton || this.selectors.upvoteButton);
 
     const posts = document.querySelectorAll(this.selectors.posts);
-    const visiblePosts = Array.from(posts).filter(post => this.isElementInViewport(post));
+    const visiblePosts = Array.from(posts).filter(post => DOMHelpers.isElementInViewport(post));
 
     console.log(`Found ${posts.length} total posts, ${visiblePosts.length} visible posts`);
 
@@ -776,14 +972,14 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
         }, 3000);
 
         console.log('Attempting to click like button...');
-        await this.humanLikeClick(likeButton, 'Test liked a post! ❤️');
+        await this.cursor.humanLikeClick(likeButton, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Test liked a post! ❤️');
 
-        this.showNotification('Like button clicked!', 'success');
+        DOMHelpers.showNotification('Like button clicked!', 'success');
       } else {
-        this.showNotification('No like button found in first visible post!', 'error');
+        DOMHelpers.showNotification('No like button found in first visible post!', 'error');
       }
     } else {
-      this.showNotification('No visible posts found!', 'error');
+      DOMHelpers.showNotification('No visible posts found!', 'error');
     }
   }
 
@@ -794,7 +990,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
     console.log('Comment button selector:', this.selectors.commentButton || this.selectors.replyButton);
 
     const posts = document.querySelectorAll(this.selectors.posts);
-    const visiblePosts = Array.from(posts).filter(post => this.isElementInViewport(post));
+    const visiblePosts = Array.from(posts).filter(post => DOMHelpers.isElementInViewport(post));
 
     console.log(`Found ${posts.length} total posts, ${visiblePosts.length} visible posts`);
 
@@ -820,12 +1016,12 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
         console.log('Attempting to open comment box and type...');
         await this.testAddPositiveComment(testPost);
 
-        this.showNotification('Comment typed (not submitted)!', 'success');
+        DOMHelpers.showNotification('Comment typed (not submitted)!', 'success');
       } else {
-        this.showNotification('No comment button found in first visible post!', 'error');
+        DOMHelpers.showNotification('No comment button found in first visible post!', 'error');
       }
     } else {
-      this.showNotification('No visible posts found!', 'error');
+      DOMHelpers.showNotification('No visible posts found!', 'error');
     }
   }
 
@@ -838,10 +1034,10 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
       }
 
       console.log('Step 1: Clicking comment button...');
-      await this.humanLikeClick(commentButton, 'Opening comment box...');
+      await this.cursor.humanLikeClick(commentButton, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Opening comment box...');
 
       console.log('Step 2: Waiting for comment box to appear...');
-      await this.sleep(2000);
+      await DOMHelpers.sleep(2000);
 
       if (this.platform === 'linkedin') {
         console.log('Step 3: LinkedIn detected - looking for comment input area...');
@@ -866,8 +1062,8 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
         if (commentInput) {
           console.log('Step 4: Clicking into LinkedIn comment input area...');
-          await this.humanLikeClick(commentInput, 'Activating comment field...');
-          await this.sleep(1000);
+          await this.cursor.humanLikeClick(commentInput, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Activating comment field...');
+          await DOMHelpers.sleep(1000);
         }
       }
 
@@ -887,7 +1083,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
         console.log(`Selector "${selector}" found ${elements.length} elements`);
 
         for (const el of elements) {
-          const isVisible = (this.isElementInViewport(el) || el.offsetParent !== null);
+          const isVisible = (DOMHelpers.isElementInViewport(el) || el.offsetParent !== null);
           const isEditable = el.contentEditable === 'true' || el.getAttribute('contenteditable') === 'true' || el.tagName === 'TEXTAREA';
 
           console.log(`  Element: visible=${isVisible}, editable=${isEditable}`, el);
@@ -904,7 +1100,7 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
 
       if (!textArea) {
         console.log('✗ Could not find editable text area');
-        this.showNotification('Could not find text area!', 'error');
+        DOMHelpers.showNotification('Could not find text area!', 'error');
         return false;
       }
 
@@ -917,16 +1113,35 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
       console.log('Step 7: Clicking text area to ensure focus...');
       textArea.click();
       textArea.focus();
-      await this.sleep(500);
+      await DOMHelpers.sleep(500);
 
-      const randomResponse = this.positiveResponses[Math.floor(Math.random() * this.positiveResponses.length)];
+      let randomResponse;
+
+      // Check if Pro mode is enabled
+      if (this.mode === 'pro') {
+        const postContent = this.extractPostContent(post);
+        console.log('[PRO MODE TEST] Extracted Post Content:', postContent);
+        console.log('[PRO MODE TEST] Selected Persona:', this.proModeSettings?.persona || 'friendly');
+
+        // For now, just log and use regular template
+        console.log('[PRO MODE TEST] TODO: Call AI API to generate comment');
+
+        randomResponse = this.templateGenerator.generateComment({
+          authorName: '' // Base surfer doesn't extract author names
+        });
+      } else {
+        randomResponse = this.templateGenerator.generateComment({
+          authorName: '' // Base surfer doesn't extract author names
+        });
+      }
+
       console.log('Step 8: Typing comment:', randomResponse);
 
-      await this.typeText(textArea, randomResponse);
-      await this.sleep(1000 + Math.random() * 1000);
+      await this.typer.typeText(textArea, randomResponse);
+      await DOMHelpers.sleep(1000 + Math.random() * 1000);
 
       console.log('Step 9: Looking for submit button...');
-      const submitButton = this.findSubmitButton(textArea);
+      const submitButton = this.findSubmitButton(textArea, post);
 
       if (submitButton) {
         console.log('Step 10: Submit button found:', submitButton);
@@ -934,13 +1149,13 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
         console.log('  Button aria-label:', submitButton.getAttribute('aria-label'));
         console.log('  Button disabled:', submitButton.disabled);
         console.log('Step 11: Clicking submit button...');
-        await this.humanLikeClick(submitButton, 'Added positive comment! 💬');
+        await this.cursor.humanLikeClick(submitButton, (msg) => DOMHelpers.showNotification(msg, 'success'), 'Added positive comment! 💬');
         console.log('✓ Comment submitted successfully');
-        this.showNotification(`Submitted: "${randomResponse}"`, 'success');
+        DOMHelpers.showNotification(`Submitted: "${randomResponse}"`, 'success');
         return true;
       } else {
         console.log('✗ Submit button not found or disabled');
-        this.showNotification(`Typed: "${randomResponse}" (submit button not found)`, 'error');
+        DOMHelpers.showNotification(`Typed: "${randomResponse}" (submit button not found)`, 'error');
         return false;
       }
 
@@ -950,295 +1165,4 @@ window.BaseAutoSurfer = class BaseAutoSurfer {
     }
   }
 
-  // ========== HUMAN-LIKE BEHAVIOR ==========
-
-  createCursor() {
-    if (this.cursor) return;
-
-    this.cursor = document.createElement('div');
-    this.cursor.style.cssText = `
-      position: fixed;
-      width: 20px;
-      height: 20px;
-      background: rgba(255, 0, 0, 0.6);
-      border: 2px solid rgba(255, 0, 0, 0.9);
-      border-radius: 50%;
-      pointer-events: none;
-      z-index: 999999;
-      transition: all 0.1s ease-out;
-      display: block;
-      box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
-      left: 50%;
-      top: 50%;
-    `;
-    document.body.appendChild(this.cursor);
-  }
-
-  showCursor() {
-    if (this.cursor) {
-      this.cursor.style.opacity = '1';
-    }
-  }
-
-  hideCursor() {
-    if (this.cursor) {
-      this.cursor.style.opacity = '0.3';
-    }
-  }
-
-  async moveCursorTo(element) {
-    if (!this.cursor) return;
-
-    const rect = element.getBoundingClientRect();
-    const targetX = rect.left + rect.width / 2;
-    const targetY = rect.top + rect.height / 2;
-
-    const currentX = parseFloat(this.cursor.style.left) || Math.random() * window.innerWidth;
-    const currentY = parseFloat(this.cursor.style.top) || Math.random() * window.innerHeight;
-
-    const distance = Math.sqrt(Math.pow(targetX - currentX, 2) + Math.pow(targetY - currentY, 2));
-    const duration = Math.max(300, Math.min(1500, distance * 2));
-
-    this.showCursor();
-    await this.animateCursorMovement(currentX, currentY, targetX, targetY, duration);
-  }
-
-  async animateCursorMovement(startX, startY, endX, endY, duration) {
-    return new Promise(resolve => {
-      const startTime = Date.now();
-      const deltaX = endX - startX;
-      const deltaY = endY - startY;
-
-      const controlPointX = startX + deltaX * 0.5 + (Math.random() - 0.5) * 100;
-      const controlPointY = startY + deltaY * 0.5 + (Math.random() - 0.5) * 100;
-
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-
-        const easeProgress = 1 - Math.pow(1 - progress, 3);
-
-        const t = easeProgress;
-        const invT = 1 - t;
-
-        const x = invT * invT * startX + 2 * invT * t * controlPointX + t * t * endX;
-        const y = invT * invT * startY + 2 * invT * t * controlPointY + t * t * endY;
-
-        this.cursor.style.left = x + 'px';
-        this.cursor.style.top = y + 'px';
-
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          resolve();
-        }
-      };
-
-      animate();
-    });
-  }
-
-  async humanLikeClick(element, notificationText = 'Clicked element') {
-    try {
-      await this.moveCursorTo(element);
-      await this.sleep(Math.random() * 200 + 100);
-
-      this.cursor.style.transform = 'scale(0.8)';
-      this.cursor.style.background = 'rgba(255, 100, 100, 0.8)';
-
-      element.click();
-
-      await this.sleep(100);
-
-      this.cursor.style.transform = 'scale(1)';
-      this.cursor.style.background = 'rgba(255, 0, 0, 0.6)';
-
-      setTimeout(() => this.hideCursor(), 500);
-
-      this.showNotification(notificationText, 'success');
-      await this.sleep(Math.random() * 500 + 200);
-
-    } catch (error) {
-      console.log('Error in humanLikeClick:', error);
-      this.hideCursor();
-    }
-  }
-
-  async typeText(textArea, text) {
-    textArea.focus();
-
-    const isContentEditable = textArea.contentEditable === 'true' || textArea.getAttribute('contenteditable') === 'true';
-
-    if (isContentEditable) {
-      textArea.focus();
-
-      const clickEvent = new MouseEvent('click', {
-        view: window,
-        bubbles: true,
-        cancelable: true
-      });
-      textArea.dispatchEvent(clickEvent);
-
-      await this.sleep(300);
-
-      textArea.innerHTML = '';
-      textArea.textContent = '';
-
-      if (document.execCommand) {
-        document.execCommand('selectAll', false, null);
-        document.execCommand('delete', false, null);
-      }
-
-      await this.sleep(200);
-
-      for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-
-        if (document.execCommand) {
-          document.execCommand('insertText', false, char);
-        } else {
-          textArea.textContent += char;
-          textArea.innerHTML = textArea.textContent;
-        }
-
-        textArea.dispatchEvent(new InputEvent('input', {
-          bubbles: true,
-          cancelable: true,
-          inputType: 'insertText',
-          data: char
-        }));
-
-        await this.sleep(Math.random() * 100 + 50);
-
-        if (Math.random() < 0.1) {
-          await this.sleep(Math.random() * 500 + 200);
-        }
-      }
-
-      textArea.dispatchEvent(new Event('input', { bubbles: true }));
-      textArea.dispatchEvent(new Event('change', { bubbles: true }));
-      textArea.blur();
-      textArea.focus();
-
-    } else {
-
-      textArea.value = '';
-
-      for (let i = 0; i < text.length; i++) {
-        textArea.value += text[i];
-        textArea.dispatchEvent(new Event('input', { bubbles: true }));
-
-        await this.sleep(Math.random() * 100 + 50);
-
-        if (Math.random() < 0.1) {
-          await this.sleep(Math.random() * 500 + 200);
-        }
-      }
-    }
-  }
-
-  // ========== UTILITIES ==========
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  isElementInViewport(element) {
-    const rect = element.getBoundingClientRect();
-    return (
-      rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
-      rect.bottom > 0 &&
-      rect.left < (window.innerWidth || document.documentElement.clientWidth) &&
-      rect.right > 0
-    );
-  }
-
-  isPostFullyEngageable(post) {
-    // Check if post AND its interaction buttons are visible and accessible
-
-    // 1. Check if post container is at least partially visible
-    if (!this.isElementInViewport(post)) {
-      return false;
-    }
-
-    // 2. Find interaction buttons (like, comment)
-    const likeButton = post.querySelector(this.selectors.likeButton || this.selectors.upvoteButton);
-    const commentButton = post.querySelector(this.selectors.commentButton || this.selectors.replyButton);
-
-    // 3. Collect valid buttons
-    const buttons = [likeButton, commentButton].filter(btn => btn);
-
-    if (buttons.length === 0) {
-      // No buttons found (unusual), just check if post top is visible
-      const rect = post.getBoundingClientRect();
-      return rect.top >= 0 && rect.top < window.innerHeight * 0.8;
-    }
-
-    // 4. Check if at least one button is fully in viewport
-    for (const button of buttons) {
-      const rect = button.getBoundingClientRect();
-      const fullyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-      if (fullyVisible) {
-        return true; // At least one button fully visible
-      }
-    }
-
-    return false;
-  }
-
-  async scrollPostIntoEngageableView(post) {
-    // Scrolls post so interaction buttons are comfortably visible
-
-    // Find the lowest interaction element
-    const likeButton = post.querySelector(this.selectors.likeButton || this.selectors.upvoteButton);
-    const commentButton = post.querySelector(this.selectors.commentButton || this.selectors.replyButton);
-
-    const buttons = [likeButton, commentButton].filter(btn => btn);
-
-    if (buttons.length > 0) {
-      // Find the button with lowest position (furthest down the page)
-      let lowestButton = buttons[0];
-      let lowestBottom = lowestButton.getBoundingClientRect().bottom;
-
-      for (const button of buttons) {
-        const bottom = button.getBoundingClientRect().bottom;
-        if (bottom > lowestBottom) {
-          lowestButton = button;
-          lowestBottom = bottom;
-        }
-      }
-
-      // Scroll so the lowest button is comfortably in view (centered)
-      lowestButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      await this.sleep(500);
-    } else {
-      // Fallback: scroll post top into view
-      post.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      await this.sleep(500);
-    }
-  }
-
-  showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
-      color: white;
-      padding: 12px 20px;
-      border-radius: 8px;
-      z-index: 10000;
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    `;
-    notification.textContent = message;
-
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-      notification.remove();
-    }, 3000);
-  }
 };

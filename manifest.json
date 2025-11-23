@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "LajySocial",
+  "name": "Engagency",
   "version": "1.0",
-  "description": "Auto-surf social media with positive engagement",
+  "description": "Intelligent social media automation for authentic engagement",
   "permissions": [
     "activeTab",
     "storage",
@@ -27,6 +27,11 @@
         "https://www.reddit.com/*"
       ],
       "js": [
+        "surfers/utilities/dom-helpers.js",
+        "surfers/utilities/cursor-animator.js",
+        "surfers/utilities/text-typer.js",
+        "surfers/utilities/engagement-helpers.js",
+        "surfers/utilities/template-generator.js",
         "surfers/base-surfer.js",
         "surfers/facebook-surfer.js",
         "surfers/linkedin-surfer.js",
@@ -40,7 +45,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "LajySocial",
+    "default_title": "Engagency",
     "default_icon": "icons/icon.png"
   },
   "icons": {

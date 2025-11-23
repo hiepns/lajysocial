@@ -1,74 +1,79 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8">
   <style>
     :root {
-      --bg-primary: #030510;
-      --glass: rgba(8, 11, 24, 0.65);
+      /* Default Light Mode (Cozy/Paper) */
+      --bg-gradient-start: #f9f6f0;
+      --bg-gradient-end: #ede8dd;
+      --card-bg: #ffffff;
+      --card-border: rgba(0, 0, 0, 0.04);
+      --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+
+      --text-primary: #2c2c2c;
+      --text-secondary: #666666;
+
+      --accent-primary: #d4735e;
+      /* Terracotta */
+      --accent-secondary: #89a894;
+      /* Sage Green */
+
+      --glass-border: rgba(0, 0, 0, 0.05);
+      --btn-radius: 16px;
+      --card-radius: 24px;
+    }
+
+    /* Dark Mode Overrides */
+    body.dark-mode {
+      --bg-gradient-start: #1a1a1d;
+      --bg-gradient-end: #2d2d30;
+      --card-bg: rgba(45, 45, 48, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0a0;
+
+      --accent-primary: #d4735e;
+      /* Keep Terracotta pop */
+      --accent-secondary: #7a9684;
+      /* Subdued Sage */
+
       --glass-border: rgba(255, 255, 255, 0.1);
-      --text-primary: #f5f7ff;
-      --text-muted: rgba(245, 247, 255, 0.7);
-      --accent: #7af5ff;
-      --accent-strong: #ff7be9;
-      --success: #2de789;
-      --danger: #ff5d71;
     }
 
     * {
       box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
     }
 
     body {
       width: 420px;
       min-height: 640px;
       margin: 0;
-      padding: 18px;
-      font-family: 'SF Pro Display', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       color: var(--text-primary);
-      background: radial-gradient(circle at 20% -10%, #1a1c50, transparent 45%), radial-gradient(circle at 80% 0%, #30113a, transparent 45%), var(--bg-primary);
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
       position: relative;
-      overflow: hidden;
+      overflow-x: hidden;
+      transition: background 0.3s ease, color 0.3s ease;
     }
 
-    body::before,
-    body::after {
+    /* Paper Texture Overlay */
+    body::before {
       content: '';
       position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
+      opacity: 0.4;
       pointer-events: none;
-      border-radius: 50%;
-      filter: blur(70px);
-      opacity: 0.6;
       z-index: 0;
-    }
-
-    body::before {
-      width: 260px;
-      height: 260px;
-      top: -90px;
-      left: -60px;
-      background: radial-gradient(circle, rgba(122, 245, 255, 0.65), transparent 70%);
-    }
-
-    body::after {
-      width: 280px;
-      height: 280px;
-      bottom: -120px;
-      right: -80px;
-      background: radial-gradient(circle, rgba(255, 123, 233, 0.55), transparent 70%);
-    }
-
-    body.light-mode {
-      background: radial-gradient(circle at 20% -10%, #f7fbff, transparent 55%), radial-gradient(circle at 80% 0%, #ffe3fb, transparent 45%), #e8edf7;
-      color: #0d1627;
-    }
-
-    body.light-mode::before {
-      background: radial-gradient(circle, rgba(79, 181, 255, 0.4), transparent 70%);
-    }
-
-    body.light-mode::after {
-      background: radial-gradient(circle, rgba(255, 165, 213, 0.35), transparent 70%);
     }
 
     .app-shell {
@@ -76,191 +81,191 @@
       z-index: 1;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      padding: 20px;
-      border-radius: 28px;
-      background: linear-gradient(145deg, rgba(7, 10, 26, 0.9), rgba(2, 5, 15, 0.95));
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 35px 70px rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(40px);
-    }
-
-    body.light-mode .app-shell {
-      background: rgba(255, 255, 255, 0.8);
-      border: 1px solid rgba(8, 14, 40, 0.08);
-      box-shadow: 0 25px 55px rgba(108, 136, 189, 0.25);
+      gap: 18px;
     }
 
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      padding-bottom: 2px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    body.light-mode .header {
-      border-bottom-color: rgba(8, 14, 40, 0.08);
-    }
-
-    .header-title {
-      flex: 1;
-      text-align: center;
+      padding: 0 4px;
+      margin-bottom: 6px;
     }
 
     .header-title h1 {
       margin: 0;
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 700;
-      letter-spacing: -0.4px;
+      color: var(--text-primary);
+      letter-spacing: -0.5px;
     }
 
     .header-buttons {
       display: flex;
-      gap: 8px;
-      justify-content: flex-end;
+      gap: 10px;
     }
 
     .icon-btn {
-      width: 34px;
-      height: 34px;
+      width: 38px;
+      height: 38px;
       border-radius: 12px;
       border: 1px solid var(--glass-border);
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.4);
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: 16px;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-      backdrop-filter: blur(18px);
+      transition: all 0.2s ease;
+    }
+
+    body.dark-mode .icon-btn {
+      background: rgba(255, 255, 255, 0.05);
     }
 
     .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.8);
       transform: translateY(-1px);
-      border-color: rgba(255, 255, 255, 0.5);
-      background: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
 
-    body.light-mode .icon-btn {
-      background: rgba(0, 10, 32, 0.04);
-      border-color: rgba(0, 10, 32, 0.08);
-      color: #0d1627;
-    }
-
-    body.light-mode .icon-btn:hover {
-      background: rgba(0, 10, 32, 0.09);
-      border-color: rgba(0, 10, 32, 0.14);
+    body.dark-mode .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
     }
 
     .status {
-      padding: 14px 16px;
-      border-radius: 20px;
+      padding: 14px 18px;
+      border-radius: 18px;
       text-align: center;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      background: linear-gradient(130deg, rgba(122, 245, 255, 0.18), rgba(255, 123, 233, 0.12));
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      border: 1px dashed var(--accent-secondary);
+      background: rgba(137, 168, 148, 0.1);
+      color: var(--accent-secondary);
+      font-weight: 600;
+      transition: all 0.3s ease;
     }
 
     .status.active {
-      border-color: rgba(45, 231, 137, 0.4);
-      background: linear-gradient(130deg, rgba(45, 231, 137, 0.25), rgba(122, 245, 255, 0.15));
-      box-shadow: 0 12px 30px rgba(45, 231, 137, 0.25);
+      background: var(--accent-secondary);
+      color: #fff;
+      border-style: solid;
+      box-shadow: 0 4px 12px rgba(137, 168, 148, 0.3);
     }
 
-    .status.inactive {
-      border-color: rgba(255, 93, 113, 0.35);
-      background: linear-gradient(130deg, rgba(255, 93, 113, 0.2), rgba(255, 123, 233, 0.1));
+    body.dark-mode .status {
+      background: rgba(122, 150, 132, 0.15);
+      border-color: var(--accent-secondary);
     }
 
-    body.light-mode .status {
-      background: rgba(255, 255, 255, 0.78);
-      border-color: rgba(8, 14, 40, 0.08);
-      color: #0d1627;
-      box-shadow: 0 12px 30px rgba(135, 151, 180, 0.2);
+    body.dark-mode .status.active {
+      background: var(--accent-secondary);
+      color: #fff;
     }
 
     #status-text {
       font-size: 14px;
-      font-weight: 600;
-      margin: 0 0 3px 0;
+      margin-bottom: 2px;
+      color: inherit;
     }
 
     .platform-info {
       font-size: 11px;
-      letter-spacing: 0.05em;
+      opacity: 0.8;
+      font-weight: 500;
       text-transform: uppercase;
-      color: var(--text-muted);
-    }
-
-    body.light-mode .platform-info {
-      color: rgba(13, 22, 39, 0.6);
+      letter-spacing: 0.5px;
     }
 
     .controls {
       display: flex;
-      gap: 10px;
+      gap: 12px;
     }
 
     .btn {
       flex: 1;
       border: none;
-      border-radius: 18px;
-      padding: 12px 16px;
+      border-radius: var(--btn-radius);
+      padding: 14px;
       font-weight: 600;
       font-size: 14px;
       cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
 
     .btn:disabled {
-      opacity: 0.45;
-      filter: grayscale(0.2);
+      opacity: 0.5;
       cursor: not-allowed;
       box-shadow: none;
+      filter: grayscale(0.5);
     }
 
     .btn:not(:disabled):hover {
       transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
     }
 
     .btn[data-variant="start"] {
-      background: linear-gradient(135deg, #2de789, #7af5ff);
-      color: #03120f;
+      background: var(--accent-secondary);
+      color: #fff;
     }
 
     .btn[data-variant="stop"] {
-      background: linear-gradient(135deg, #ff5d71, #ff7be9);
-      color: #1e020c;
+      background: #fff;
+      color: var(--text-secondary);
+      border: 1px solid var(--glass-border);
+    }
+
+    body.dark-mode .btn[data-variant="stop"] {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary);
+    }
+
+    /* Active stop button - carrot/terracotta color */
+    .btn[data-variant="stop"]:not(:disabled) {
+      background: var(--accent-primary);
+      color: #fff;
+      border: 1px solid var(--accent-primary);
+      box-shadow: 0 2px 8px rgba(212, 115, 94, 0.2);
+    }
+
+    .btn[data-variant="stop"]:not(:disabled):hover {
+      background: #c26550;
+      border-color: #c26550;
+      box-shadow: 0 4px 12px rgba(212, 115, 94, 0.3);
+    }
+
+    /* Active stop button in dark mode */
+    body.dark-mode .btn[data-variant="stop"]:not(:disabled) {
+      background: var(--accent-primary);
+      color: #fff;
+      border: 1px solid var(--accent-primary);
+      box-shadow: 0 2px 8px rgba(212, 115, 94, 0.3);
+    }
+
+    body.dark-mode .btn[data-variant="stop"]:not(:disabled):hover {
+      background: #c26550;
+      border-color: #c26550;
+      box-shadow: 0 4px 12px rgba(212, 115, 94, 0.4);
     }
 
     .card {
-      background: var(--glass);
-      border-radius: 24px;
-      padding: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
-      backdrop-filter: blur(28px);
+      background: var(--card-bg);
+      border-radius: var(--card-radius);
+      padding: 18px;
+      border: 1px solid var(--card-border);
+      box-shadow: var(--card-shadow);
       display: flex;
       flex-direction: column;
-      gap: 12px;
-    }
-
-    body.light-mode .card {
-      background: rgba(255, 255, 255, 0.78);
-      border-color: rgba(8, 14, 40, 0.08);
-      color: #0d1627;
-      box-shadow: 0 12px 30px rgba(135, 151, 180, 0.2);
+      gap: 14px;
+      transition: transform 0.2s ease;
+      backdrop-filter: blur(10px);
     }
 
     .card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
     }
 
     .card-title {
@@ -269,222 +274,188 @@
       gap: 10px;
       font-size: 14px;
       font-weight: 600;
+      color: var(--text-primary);
     }
 
     .card-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 14px;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
-      background: linear-gradient(140deg, rgba(122, 245, 255, 0.18), rgba(255, 123, 233, 0.12));
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 14px;
+      background: rgba(212, 115, 94, 0.1);
+      /* Terracotta tint */
+      color: var(--accent-primary);
     }
 
+    /* Cozy Toggle */
     .toggle {
       position: relative;
       width: 44px;
       height: 24px;
       display: inline-flex;
-      align-items: center;
+      cursor: pointer;
     }
 
     .toggle input {
       opacity: 0;
       width: 0;
       height: 0;
-      position: absolute;
     }
 
     .toggle-track {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      transition: all 0.25s ease;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border-radius: 30px;
+      background: #e0e0e0;
+      transition: 0.3s ease;
     }
 
-    .toggle-track::after {
+    body.dark-mode .toggle-track {
+      background: #444;
+    }
+
+    .toggle-track::before {
       content: '';
       position: absolute;
-      width: 18px;
       height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
       border-radius: 50%;
-      background: #ffffff;
-      top: 2px;
-      left: 2px;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
-      transition: transform 0.25s ease;
+      transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
-    .toggle input:checked + .toggle-track {
-      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-      border-color: rgba(255, 255, 255, 0.35);
+    .toggle input:checked+.toggle-track {
+      background: var(--accent-secondary);
     }
 
-    .toggle input:checked + .toggle-track::after {
+    .toggle input:checked+.toggle-track::before {
       transform: translateX(20px);
-    }
-
-    body.light-mode .toggle-track {
-      background: rgba(0, 0, 0, 0.08);
-      border-color: rgba(0, 0, 0, 0.12);
-    }
-
-    .card-content {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
     }
 
     .setting-group {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
     }
 
     .setting-group label {
       font-size: 12px;
-      color: var(--text-muted);
+      color: var(--text-secondary);
       display: flex;
       justify-content: space-between;
-      gap: 6px;
-      flex-wrap: wrap;
+      font-weight: 500;
     }
 
-    body.light-mode .setting-group label {
-      color: rgba(13, 22, 39, 0.7);
+    /* Range Slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #eee;
+      outline: none;
+    }
+
+    body.dark-mode input[type="range"] {
+      background: #444;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+      cursor: pointer;
+      border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(212, 115, 94, 0.3);
+      transition: transform 0.1s;
+    }
+
+    body.dark-mode input[type="range"]::-webkit-slider-thumb {
+      border-color: #2d2d30;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
     }
 
     .range-container {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
-      width: 100%;
     }
 
     .range-input {
       flex: 1;
     }
 
-    input[type="range"] {
-      -webkit-appearance: none;
-      width: 100%;
-      height: 6px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.22);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
-
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: #ffffff;
-      border: 2px solid var(--accent);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-      cursor: pointer;
-    }
-
-    input[type="range"]::-moz-range-thumb {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: #ffffff;
-      border: 2px solid var(--accent);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-      cursor: pointer;
-    }
-
-    body.light-mode input[type="range"] {
-      background: rgba(0, 0, 0, 0.08);
-      border-color: rgba(0, 0, 0, 0.05);
-    }
-
-    .range-separator {
-      font-size: 12px;
-      font-weight: 700;
-      opacity: 0.7;
-    }
-
     .range-value {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-
-    body.light-mode .range-value {
-      color: rgba(13, 22, 39, 0.6);
-    }
-
-    .divider {
-      height: 1px;
-      background: rgba(255, 255, 255, 0.08);
-      border: none;
-    }
-
-    body.light-mode .divider {
-      background: rgba(0, 0, 0, 0.08);
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      text-align: right;
     }
 
     .test-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
     }
 
-    .btn[data-variant="amber"] {
-      background: linear-gradient(135deg, #ffb347, #ffcc33);
-      color: #2a1600;
-    }
-
-    .btn[data-variant="pink"] {
-      background: linear-gradient(135deg, #ff758c, #ff7be9);
-      color: #24000f;
-    }
-
-    .btn[data-variant="violet"] {
-      background: linear-gradient(135deg, #a18cd1, #fbc2eb);
-      color: #1b0524;
-    }
-
-    .warning {
-      border-radius: 16px;
-      padding: 10px 12px;
+    .test-grid .btn {
+      padding: 10px 6px;
       font-size: 11px;
-      text-align: center;
-      background: rgba(255, 193, 7, 0.18);
-      border: 1px solid rgba(255, 193, 7, 0.34);
-      color: #fadd8a;
+      background: transparent;
+      border: 1px solid var(--glass-border);
+      color: var(--text-secondary);
+      box-shadow: none;
+    }
+
+    .test-grid .btn:hover {
+      background: rgba(0, 0, 0, 0.03);
+      color: var(--text-primary);
+      border-color: var(--accent-secondary);
+    }
+
+    body.dark-mode .test-grid .btn:hover {
+      background: rgba(255, 255, 255, 0.05);
     }
   </style>
 </head>
+
 <body>
   <main class="app-shell">
     <div class="header">
       <div class="header-title">
-        <h1 id="title">🌊 Auto Surfer</h1>
+        <h1 id="title">Engagency</h1>
       </div>
       <div class="header-buttons">
+        <button id="modeBtn" class="icon-btn" title="Toggle Free/Pro Mode">FREE</button>
         <button id="langBtn" class="icon-btn" title="Switch Language">🇻🇳</button>
-        <button id="themeBtn" class="icon-btn" title="Toggle Theme">☀️</button>
+        <button id="themeBtn" class="icon-btn" title="Toggle Theme">🌙</button>
       </div>
     </div>
 
     <div id="status" class="status inactive">
-      <div id="status-text">Inactive</div>
-      <div id="platform-text" class="platform-info">Detecting platform...</div>
+      <div id="status-text">Ready to Surf</div>
+      <div id="platform-text" class="platform-info">Facebook Detected</div>
     </div>
 
     <div class="controls">
-      <button id="startBtn" class="btn btn-start" data-variant="start">Start Surfing</button>
-      <button id="stopBtn" class="btn btn-stop" data-variant="stop" disabled>Stop</button>
+      <button id="startBtn" class="btn" data-variant="start">Start Surfing</button>
+      <button id="stopBtn" class="btn" data-variant="stop" disabled>Stop</button>
     </div>
 
     <div class="card">
@@ -496,13 +467,12 @@
       </div>
       <div class="card-content">
         <div class="setting-group">
-          <label><span id="scrollSpeedRangeLabel">Scroll Speed Range</span><span id="scrollSpeedValue">2s - 4s</span></label>
+          <label><span id="scrollSpeedRangeLabel">Speed Range</span><span id="scrollSpeedValue">2s - 4s</span></label>
           <div class="range-container">
             <div class="range-input">
               <input type="range" id="scrollSpeedMin" min="1000" max="20000" step="1000" value="2000">
               <div class="range-value"><span id="minLabel">Min</span>: <span id="scrollSpeedMinValue">2s</span></div>
             </div>
-            <div class="range-separator">-</div>
             <div class="range-input">
               <input type="range" id="scrollSpeedMax" min="1000" max="30000" step="1000" value="4000">
               <div class="range-value"><span id="maxLabel">Max</span>: <span id="scrollSpeedMaxValue">4s</span></div>
@@ -518,16 +488,60 @@
           <span class="card-icon">👁️</span>
           <span id="expandContentLabel">Expand Content</span>
         </div>
-        <label class="toggle" for="enableSeeMore">
-          <input type="checkbox" id="enableSeeMore">
+        <label class="toggle">
+          <input type="checkbox" id="enableSeeMore" checked>
           <span class="toggle-track"></span>
         </label>
       </div>
       <div class="card-content">
         <div class="setting-group">
-          <label for="seeMoreDelay"><span id="clickDelayLabel">Click Delay</span><span id="seeMoreDelayValue">2s</span></label>
+          <label><span id="clickDelayLabel">Click Delay</span><span id="seeMoreDelayValue">2s</span></label>
           <input type="range" id="seeMoreDelay" min="1000" max="10000" step="500" value="2000">
           <div class="range-value" id="fasterSlowerLabel">Faster ← → Slower</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="linkedinOptionsCard" style="display: none;">
+      <div class="card-header">
+        <div class="card-title">
+          <span class="card-icon">🔵</span>
+          <span id="linkedinOptionsLabel">LinkedIn Options</span>
+        </div>
+      </div>
+      <div class="card-content">
+        <div class="setting-group" style="margin-bottom: 12px;">
+          <label style="display: flex; justify-content: space-between; align-items: center;">
+            <span id="skipCompanyPagesLabel">Skip Company Pages</span>
+            <label class="toggle">
+              <input type="checkbox" id="skipCompanyPages" checked>
+              <span class="toggle-track"></span>
+            </label>
+          </label>
+        </div>
+        <div class="setting-group" style="margin-bottom: 12px;">
+          <label style="display: flex; justify-content: space-between; align-items: center;">
+            <span id="skipFriendActivitiesLabel">Skip Friend Activities</span>
+            <label class="toggle">
+              <input type="checkbox" id="skipFriendActivities" checked>
+              <span class="toggle-track"></span>
+            </label>
+          </label>
+        </div>
+        <div class="setting-group" style="margin-bottom: 12px;">
+          <label style="display: flex; justify-content: space-between; align-items: center;">
+            <span id="timeFilterEnabledLabel">Time Filter</span>
+            <label class="toggle">
+              <input type="checkbox" id="timeFilterEnabled" checked>
+              <span class="toggle-track"></span>
+            </label>
+          </label>
+        </div>
+        <div class="setting-group">
+          <label><span id="maxPostAgeLabel">Max Post Age</span><span id="maxPostAgeValue">72 hours</span></label>
+          <input type="number" id="maxPostAge" min="1" max="720" step="1" value="72"
+            style="width: 100%; padding: 10px; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.3); color: var(--text-primary); font-family: inherit; font-size: 12px;">
+          <div class="range-value" id="maxPostAgeHint">Only engage with posts newer than this (in hours)</div>
         </div>
       </div>
     </div>
@@ -538,20 +552,20 @@
           <span class="card-icon">❤️</span>
           <span id="autoLikeLabel">Auto Like</span>
         </div>
-        <label class="toggle" for="enableAutoLike">
+        <label class="toggle">
           <input type="checkbox" id="enableAutoLike">
           <span class="toggle-track"></span>
         </label>
       </div>
       <div class="card-content">
         <div class="setting-group">
-          <label for="likeDelay"><span id="likeDelayLabel">Like Delay</span><span id="likeDelayValue">5s</span></label>
+          <label><span id="likeDelayLabel">Like Delay</span><span id="likeDelayValue">5s</span></label>
           <input type="range" id="likeDelay" min="2000" max="30000" step="1000" value="5000">
           <div class="range-value" id="moreFrequentLabel1">More Frequent ← → Less Frequent</div>
         </div>
-
         <div class="setting-group">
-          <label for="likeProbability"><span id="likeProbabilityLabel">Like Probability</span><span id="likeProbabilityValue">70%</span></label>
+          <label><span id="likeProbabilityLabel">Like Probability</span><span
+              id="likeProbabilityValue">70%</span></label>
           <input type="range" id="likeProbability" min="0" max="100" step="5" value="70">
           <div class="range-value" id="neverAlwaysLabel1">Never ← → Always</div>
         </div>
@@ -564,27 +578,88 @@
           <span class="card-icon">💬</span>
           <span id="autoCommentLabel">Auto Comment</span>
         </div>
-        <label class="toggle" for="enableAutoComment">
+        <label class="toggle">
           <input type="checkbox" id="enableAutoComment">
           <span class="toggle-track"></span>
         </label>
       </div>
       <div class="card-content">
         <div class="setting-group">
-          <label for="commentDelay"><span id="commentDelayLabel">Comment Delay</span>: <span id="commentDelayValue">8s</span></label>
+          <label><span id="commentDelayLabel">Comment Delay</span><span id="commentDelayValue">8s</span></label>
           <input type="range" id="commentDelay" min="5000" max="60000" step="1000" value="8000">
           <div class="range-value" id="moreFrequentLabel2">More Frequent ← → Less Frequent</div>
         </div>
-
         <div class="setting-group">
-          <label for="commentProbability"><span id="commentProbabilityLabel">Comment Probability</span>: <span id="commentProbabilityValue">30%</span></label>
+          <label><span id="commentProbabilityLabel">Comment Probability</span><span
+              id="commentProbabilityValue">30%</span></label>
           <input type="range" id="commentProbability" min="0" max="100" step="5" value="30">
           <div class="range-value" id="neverAlwaysLabel2">Never ← → Always</div>
         </div>
+
+        <!-- Free Mode Section -->
+        <div id="freeModeSection" class="setting-group" style="border-top: 1px dashed var(--glass-border); padding-top: 14px; margin-top: 14px;">
+          <label style="margin-bottom: 6px;">
+            <span id="templateInstructionsLabel">✍️ Your Comments for <span id="currentPlatform">this platform</span> (one per line)</span>
+          </label>
+          <textarea id="commentTemplates"
+            placeholder=""
+            style="width: 100%; min-height: 100px; padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.3); color: var(--text-primary); font-family: inherit; font-size: 12px; resize: vertical; transition: all 0.2s ease;">Great insight{comma} {author_first}!
+Thanks for sharing this perspective
+This really resonates with me{comma} {author_first}
+Valuable points here
+Appreciate you posting this{comma} {author_first}
+Interesting take on this topic
+Well said{comma} {author_first}!
+This adds a lot of value
+Love this perspective
+Thanks for the thoughtful post{comma} {author_first}</textarea>
+          <div class="range-value" style="margin-top: 6px; font-size: 10px; line-height: 1.4;">
+            <span id="templateTipLabel">💡 Comments are stored per platform. For LinkedIn: use {author_first} for name, {comma} for optional comma.</span>
+          </div>
+          <button id="saveTemplatesBtn" class="btn" style="background: var(--accent-secondary); color: white; margin-top: 8px; width: 100%;">
+            <span id="saveTemplatesLabel">Save Comments</span>
+          </button>
+        </div>
+
+        <!-- Pro Mode Section -->
+        <div id="proModeSection" class="setting-group" style="border-top: 1px dashed var(--glass-border); padding-top: 14px; margin-top: 14px; display: none;">
+          <label style="margin-bottom: 10px;">
+            <span id="personaLabel">🎭 Comment Persona</span>
+          </label>
+          <select id="personaSelect" style="width: 100%; padding: 10px; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.3); color: var(--text-primary); font-family: inherit; font-size: 12px; margin-bottom: 12px;">
+            <option value="friendly">Friendly/Supportive</option>
+            <option value="quirky">Quirky</option>
+            <option value="critical">Critical Thinking</option>
+            <option value="professional">Professional</option>
+            <option value="casual">Casual</option>
+            <option value="custom">Custom Preset...</option>
+          </select>
+
+          <div id="customPresetSection" style="display: none;">
+            <label style="margin-bottom: 6px; display: block;">
+              <span id="presetNameLabel">Preset Name</span>
+            </label>
+            <input type="text" id="presetName" placeholder="e.g., My Professional Style"
+              style="width: 100%; padding: 10px; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.3); color: var(--text-primary); font-family: inherit; font-size: 12px; margin-bottom: 12px;">
+
+            <label style="margin-bottom: 6px; display: block;">
+              <span id="presetReferenceLabel">Reference Comments (examples of your style)</span>
+            </label>
+            <textarea id="presetReference"
+              placeholder="Paste 3-5 example comments that reflect your writing style..."
+              style="width: 100%; min-height: 80px; padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.3); color: var(--text-primary); font-family: inherit; font-size: 12px; resize: vertical; margin-bottom: 12px;"></textarea>
+
+            <button id="savePresetBtn" class="btn" style="background: var(--accent-primary); color: white; width: 100%; margin-bottom: 8px;">
+              <span id="savePresetLabel">Save Custom Preset</span>
+            </button>
+          </div>
+
+          <div class="range-value" style="margin-top: 6px; font-size: 10px; line-height: 1.4;">
+            <span id="proModeTipLabel">🤖 AI will read post content and generate comments matching your chosen persona</span>
+          </div>
+        </div>
       </div>
     </div>
-
-    <div class="divider"></div>
 
     <div class="card">
       <div class="card-header">
@@ -594,13 +669,13 @@
         </div>
       </div>
       <div class="card-content test-grid">
-        <button id="testSeeMoreBtn" class="btn" data-variant="amber">Test "See More"</button>
-        <button id="testLikeBtn" class="btn" data-variant="pink">Test "Like Post"</button>
-        <button id="testCommentBtn" class="btn" data-variant="violet">Test "Comment"</button>
+        <button id="testSeeMoreBtn" class="btn">Test "See More"</button>
+        <button id="testLikeBtn" class="btn">Test "Like"</button>
+        <button id="testCommentBtn" class="btn">Test "Comment"</button>
+        <button id="testLinkedInExtractBtn" class="btn">Test LinkedIn Extract</button>
       </div>
     </div>
 
-    <!-- Support Me Section -->
     <div class="card">
       <div class="card-header">
         <div class="card-title">
@@ -609,9 +684,11 @@
         </div>
       </div>
       <div class="card-content">
-        <button id="supportBtn" class="btn" data-variant="primary">Buy me a phin ☕</button>
+        <button id="supportBtn" class="btn" style="background: var(--accent-primary); color: white;">Buy me a phin
+          ☕</button>
         <div id="supportQRContainer" style="display: none; margin-top: 12px; text-align: center;">
-          <img id="supportQR" src="SupportQR.jpeg" alt="Support QR Code" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+          <img id="supportQR" src="SupportQR.jpeg" alt="Support QR Code"
+            style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
         </div>
       </div>
     </div>
@@ -619,4 +696,5 @@
 
   <script src="popup.js"></script>
 </body>
+
 </html>
